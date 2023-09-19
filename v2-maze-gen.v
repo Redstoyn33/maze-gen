@@ -13,12 +13,15 @@ fn main() {
 	mut steps := 0
 	mut speed := 0
 	mut sn := 0
+	mut pause := false
+	mut m_x := 0
+	mut m_y := 0
 
 	r.init_window(screen_size, screen_size, 'Maze Generator'.str)
 
-	screen_size = min(r.get_monitor_width(0),r.get_monitor_height(0))*4/5
-	r.set_window_size(screen_size,screen_size)
-	r.set_window_position(100,100)
+	screen_size = min(r.get_monitor_width(0), r.get_monitor_height(0)) * 4 / 5
+	r.set_window_size(screen_size, screen_size)
+	r.set_window_position(100, 100)
 
 	r.set_target_fps(60)
 	for !r.window_should_close() {
@@ -33,6 +36,30 @@ fn main() {
 		if sel {
 			if r.is_key_pressed(r.key_enter) {
 				sel = false
+			}
+			if r.is_key_pressed(r.key_i) {
+				if size_y < screen_size / 2 {
+					size_y+=10
+					size_m, size_t = update_size(size_x, size_y, screen_size)
+				}
+			}
+			if r.is_key_pressed(r.key_k) {
+				if size_y > 10 {
+					size_y-=10
+					size_m, size_t = update_size(size_x, size_y, screen_size)
+				}
+			}
+			if r.is_key_pressed(r.key_l) {
+				if size_x < screen_size / 2 {
+					size_x+=10
+					size_m, size_t = update_size(size_x, size_y, screen_size)
+				}
+			}
+			if r.is_key_pressed(r.key_j) {
+				if size_x > 10 {
+					size_x-=10
+					size_m, size_t = update_size(size_x, size_y, screen_size)
+				}
 			}
 			if r.is_key_pressed(r.key_up) {
 				if size_y < screen_size / 10 {
@@ -70,32 +97,45 @@ fn main() {
 			}
 
 			if r.is_key_down(r.key_space) {
-				r.draw_text('${size_x}:${size_y}\n${speed}'.str, 10, 10, screen_size / 10,
+				r.draw_text('${size_x}:${size_y}\n${speed}\n${pause}\n${size_t}'.str, 10, 10, screen_size / 10,
 					r.green)
 			}
 
 			r.end_drawing()
 		} else {
 			if mut g := gen {
+				if r.is_key_pressed(r.key_p) {
+					pause = !pause
+				}
 				if pr {
 					if r.is_key_pressed(r.key_g) {
 						g.gen()
 					}
-					if speed > 0 {
-						for _ in 0 .. speed {
-							pr = g.step_gen()
-							steps++
-						}
-					} else {
-						if sn == -speed {
-							sn = 0
-							pr = g.step_gen()
-							steps++
+					if !pause {
+						if speed > 0 {
+							for _ in 0 .. speed {
+								pr = g.step_gen()
+								steps++
+							}
 						} else {
-							sn++
+							if sn == -speed {
+								sn = 0
+								pr = g.step_gen()
+								steps++
+							} else {
+								sn++
+							}
 						}
 					}
 				}
+				nm_x := (r.get_mouse_x() - size_t) / (size_t * 2)
+				nm_y := (screen_size - r.get_mouse_y() - size_t) / (size_t * 2)
+				if (nm_x != m_x || nm_y != m_y) && nm_x < size_x && nm_y < size_y {
+					m_x = nm_x
+					m_y = nm_y
+					// println('x ${m_x} y ${m_y}')
+				}
+
 				r.begin_drawing()
 
 				for x in 0 .. g.size_x {
@@ -114,13 +154,31 @@ fn main() {
 								r.red
 							}
 						}
-						r.draw_rectangle(x * size_t, screen_size - size_t - y * size_t, size_t, size_t, color)
+						r.draw_rectangle(x * size_t, screen_size - size_t - y * size_t,
+							size_t, size_t, color)
 					}
 				}
-				r.draw_rectangle(g.cur_x * size_t, screen_size - size_t - g.cur_y * size_t, size_t, size_t, r.gold)
+				r.draw_rectangle(g.cur_x * size_t, screen_size - size_t - g.cur_y * size_t,
+					size_t, size_t, r.gold)
+
+				mut r_x := m_x
+				mut r_y := m_y
+				for {
+					r.draw_rectangle(r_x * size_t * 2 + size_t, screen_size - size_t * 2 - r_y * size_t * 2,
+						size_t, size_t, r.orange)
+					posib_cord := g.path[r_y][r_x]
+					if cord := posib_cord {
+					r.draw_rectangle((r_x + cord.x) * size_t + size_t, screen_size - size_t * 2 - (r_y + cord.y) * size_t,
+						size_t, size_t, r.orange)
+						r_x = cord.x
+						r_y = cord.y
+					} else {
+						break
+					}
+				}
 
 				if r.is_key_down(r.key_space) {
-					r.draw_text('${size_x}:${size_y}\n${speed}\n${pr}\n${steps}'.str,
+					r.draw_text('${size_x}:${size_y}\n${speed}\n${pause}\n${pr}\n${steps}'.str,
 						10, 10, screen_size / 10, r.green)
 				}
 
@@ -144,6 +202,7 @@ fn main() {
 fn max(x int, y int) int {
 	return if x > y { x } else { y }
 }
+
 [inline]
 fn min(x int, y int) int {
 	return if x < y { x } else { y }
@@ -159,8 +218,14 @@ struct MGen {
 	size_y int
 mut:
 	s     [][]u8
+	path  [][]?Cord
 	cur_x int
 	cur_y int
+}
+
+struct Cord {
+	x int
+	y int
 }
 
 fn gen_init(size_x int, size_y int) MGen {
@@ -171,6 +236,7 @@ fn gen_init(size_x int, size_y int) MGen {
 		cur_x: 1
 		cur_y: 1
 		s: space
+		path: [][]?Cord{len: size_y, init: []?Cord{len: size_x, init: ?Cord(none)}}
 	}
 	gen.s[1][1] = 2
 	return gen
@@ -265,8 +331,11 @@ fn (mut g MGen) step_way(x int, y int) {
 		g.setcolor(0, y, 2)
 		g.setcolor(0, y / 2, 2)
 	}
+	old_x := g.cur_x / 2
+	old_y := g.cur_y / 2
 	g.cur_x += x
 	g.cur_y += y
+	g.path[g.cur_y / 2][g.cur_x / 2] = Cord{old_x, old_y}
 }
 
 fn (mut g MGen) step_back(x int, y int) {
